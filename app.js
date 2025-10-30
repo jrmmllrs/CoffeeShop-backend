@@ -14,7 +14,7 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-vercel-app.vercel.app'] // Replace with your actual Vercel app URL
+    ? ['https://coffee-shop-frontend.vercel.app'] // Replace with your actual Vercel app URL
     : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true
 };
