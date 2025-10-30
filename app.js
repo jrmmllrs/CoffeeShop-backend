@@ -11,15 +11,14 @@ const inventoryRoutes = require('./routes/inventory');
 
 const app = express();
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://coffee-shop-frontend.vercel.app'] // Replace with your actual Vercel app URL
-    : ['http://localhost:3000', 'http://localhost:3001'],
-  credentials: true
-};
+// SIMPLIFIED CORS - This will fix the issue
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://coffee-shop-frontend.vercel.app'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health check
@@ -44,7 +43,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/inventory', inventoryRoutes);
 
-// 404 handler - FIXED: Handle all unmatched routes
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
