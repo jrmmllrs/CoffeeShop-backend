@@ -3,9 +3,17 @@ const db = require('../config/db');
 const productController = {
   getAllProducts: async (req, res) => {
     try {
-      const [products] = await db.execute(
-        'SELECT * FROM products ORDER BY created_at DESC'
-      );
+      const [products] = await db.execute(`
+        SELECT 
+          p.*,
+          COALESCE(SUM(si.quantity), 0) as sales_count
+        FROM products p
+        LEFT JOIN sale_items si ON p.id = si.product_id
+        LEFT JOIN sales s ON si.sale_id = s.id
+        GROUP BY p.id
+        ORDER BY p.name
+      `);
+      
       res.json(products);
     } catch (error) {
       console.error('Get products error:', error);

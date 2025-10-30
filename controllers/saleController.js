@@ -131,7 +131,7 @@ const saleController = {
     }
   },
 
-  getSalesReport: async (req, res) => {
+ getSalesReport: async (req, res) => {
     try {
       const { start_date, end_date } = req.query;
 
@@ -156,6 +156,104 @@ const saleController = {
       res.json(report);
     } catch (error) {
       console.error('Get sales report error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  // NEW: Get payment method analytics
+  getPaymentMethodAnalytics: async (req, res) => {
+    try {
+      const { start_date, end_date } = req.query;
+
+      let query = `
+        SELECT 
+          payment_method,
+          COUNT(*) as transaction_count,
+          SUM(total) as total_amount,
+          ROUND((COUNT(*) * 100.0 / (SELECT COUNT(*) FROM sales WHERE 1=1 
+            ${start_date && end_date ? 'AND DATE(created_at) BETWEEN ? AND ?' : ''}
+          )), 2) as percentage
+        FROM sales 
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (start_date && end_date) {
+        query += ' AND DATE(created_at) BETWEEN ? AND ?';
+        params.push(start_date, end_date);
+        // Add the same parameters for the subquery
+        params.push(start_date, end_date);
+      }
+
+      query += ' GROUP BY payment_method ORDER BY total_amount DESC';
+
+      const [analytics] = await db.execute(query, params);
+      res.json(analytics);
+    } catch (error) {
+      console.error('Get payment analytics error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  // NEW: Get hourly sales data
+  getHourlySales: async (req, res) => {
+    try {
+      const { start_date, end_date } = req.query;
+
+      let query = `
+        SELECT 
+          HOUR(created_at) as hour,
+          COUNT(*) as transaction_count,
+          SUM(total) as total_revenue
+        FROM sales 
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (start_date && end_date) {
+        query += ' AND DATE(created_at) BETWEEN ? AND ?';
+        params.push(start_date, end_date);
+      }
+
+      query += ' GROUP BY HOUR(created_at) ORDER BY hour';
+
+      const [hourlyData] = await db.execute(query, params);
+      res.json(hourlyData);
+    } catch (error) {
+      console.error('Get hourly sales error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  // NEW: Get category-wise sales
+  getCategorySales: async (req, res) => {
+    try {
+      const { start_date, end_date } = req.query;
+
+      let query = `
+        SELECT 
+          p.category,
+          COUNT(si.id) as items_sold,
+          SUM(si.subtotal) as total_revenue,
+          SUM(si.quantity) as total_quantity
+        FROM sale_items si
+        JOIN sales s ON si.sale_id = s.id
+        JOIN products p ON si.product_id = p.id
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (start_date && end_date) {
+        query += ' AND DATE(s.created_at) BETWEEN ? AND ?';
+        params.push(start_date, end_date);
+      }
+
+      query += ' GROUP BY p.category ORDER BY total_revenue DESC';
+
+      const [categoryData] = await db.execute(query, params);
+      res.json(categoryData);
+    } catch (error) {
+      console.error('Get category sales error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
