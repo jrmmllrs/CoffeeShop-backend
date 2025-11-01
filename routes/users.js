@@ -1,3 +1,4 @@
+// routes/users.js
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
@@ -10,7 +11,7 @@ router.get('/:id', auth, adminAuth, userController.getUserById);
 router.put('/:id', auth, adminAuth, userController.updateUser);
 router.delete('/:id', auth, adminAuth, userController.deleteUser);
 
-// Get cashiers (accessible by any authenticated user for dashboard)
-router.get('/cashiers/list', auth, userController.getCashiers);
+// FIXED: Correct endpoint for cashiers - matches frontend call
+router.get('/cashiers/cashiers', auth, userController.getCashiers);
 
 module.exports = router;

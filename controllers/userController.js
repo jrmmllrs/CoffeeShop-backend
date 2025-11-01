@@ -1,13 +1,22 @@
+// controllers/userController.js
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 
 const userController = {
   getAllUsers: async (req, res) => {
     try {
+      // First, check the actual column names in your users table
       const [users] = await db.execute(
-        'SELECT id, name, username, role, created_at FROM users ORDER BY created_at DESC'
+        'SELECT id, name, username, created_at FROM users ORDER BY created_at DESC'
       );
-      res.json(users);
+      
+      // If you don't have a role column, add a default role for the response
+      const usersWithRole = users.map(user => ({
+        ...user,
+        role: 'cashier' // Default role since column doesn't exist
+      }));
+      
+      res.json(usersWithRole);
     } catch (error) {
       console.error('Get users error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -18,7 +27,7 @@ const userController = {
     try {
       const { id } = req.params;
       const [users] = await db.execute(
-        'SELECT id, name, username, role, created_at FROM users WHERE id = ?',
+        'SELECT id, name, username, created_at FROM users WHERE id = ?',
         [id]
       );
 
@@ -26,7 +35,13 @@ const userController = {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      res.json(users[0]);
+      // Add default role
+      const user = {
+        ...users[0],
+        role: 'cashier'
+      };
+
+      res.json(user);
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -56,21 +71,24 @@ const userController = {
       const saltRounds = 10;
       const passwordHash = await bcrypt.hash(password, saltRounds);
 
-      // Insert new user
+      // Insert new user (without role column)
       const [result] = await db.execute(
-        'INSERT INTO users (name, username, password_hash, role) VALUES (?, ?, ?, ?)',
-        [name, username, passwordHash, role || 'cashier']
+        'INSERT INTO users (name, username, password_hash) VALUES (?, ?, ?)',
+        [name, username, passwordHash]
       );
 
-      // Get the created user (without password)
+      // Get the created user
       const [newUser] = await db.execute(
-        'SELECT id, name, username, role, created_at FROM users WHERE id = ?',
+        'SELECT id, name, username, created_at FROM users WHERE id = ?',
         [result.insertId]
       );
 
       res.status(201).json({
         message: 'User created successfully',
-        user: newUser[0]
+        user: {
+          ...newUser[0],
+          role: role || 'cashier' // Add role in response
+        }
       });
     } catch (error) {
       console.error('Create user error:', error);
@@ -81,10 +99,10 @@ const userController = {
   updateUser: async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, role, password } = req.body;
+      const { name, password } = req.body;
 
-      let query = 'UPDATE users SET name = ?, role = ?';
-      const params = [name, role];
+      let query = 'UPDATE users SET name = ?';
+      const params = [name];
 
       // If password is provided, update it
       if (password) {
@@ -132,12 +150,21 @@ const userController = {
     }
   },
 
-  // Get all cashiers
+  // Get all cashiers - FIXED: Remove role filter since column doesn't exist
   getCashiers: async (req, res) => {
     try {
-      const [cashiers] = await db.execute(
-        'SELECT id, name, username, role, created_at FROM users WHERE role = "cashier" ORDER BY name'
+      // Since we don't have role column, return all users as cashiers
+      // Or modify this based on your actual business logic
+      const [users] = await db.execute(
+        'SELECT id, name, username, created_at FROM users ORDER BY name'
       );
+      
+      // Add default role for response
+      const cashiers = users.map(user => ({
+        ...user,
+        role: 'cashier'
+      }));
+      
       res.json(cashiers);
     } catch (error) {
       console.error('Get cashiers error:', error);

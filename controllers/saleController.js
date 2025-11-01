@@ -1,3 +1,4 @@
+// controllers/saleController.js
 const db = require('../config/db');
 
 const saleController = {
@@ -131,7 +132,7 @@ const saleController = {
     }
   },
 
- getSalesReport: async (req, res) => {
+  getSalesReport: async (req, res) => {
     try {
       const { start_date, end_date } = req.query;
 
@@ -160,7 +161,89 @@ const saleController = {
     }
   },
 
-  // NEW: Get payment method analytics
+  // FIXED: Get hourly sales data with timezone adjustment
+  getHourlySales: async (req, res) => {
+    try {
+      const { start_date, end_date } = req.query;
+
+      // Try with timezone conversion first, fallback to simple approach
+      let query = `
+        SELECT 
+          HOUR(created_at) as hour,
+          COUNT(*) as transaction_count,
+          SUM(total) as total_revenue
+        FROM sales 
+        WHERE 1=1
+      `;
+      const params = [];
+
+      if (start_date && end_date) {
+        query += ' AND DATE(created_at) BETWEEN ? AND ?';
+        params.push(start_date, end_date);
+      }
+
+      query += ' GROUP BY HOUR(created_at) ORDER BY hour';
+
+      const [hourlyData] = await db.execute(query, params);
+      
+      // Format the response to ensure all hours (0-23) are represented
+      const hourlyMap = {};
+      hourlyData.forEach(item => {
+        hourlyMap[item.hour] = item;
+      });
+
+      // Create complete hourly data (0-23)
+      const completeHourlyData = [];
+      for (let hour = 0; hour < 24; hour++) {
+        if (hourlyMap[hour]) {
+          completeHourlyData.push(hourlyMap[hour]);
+        } else {
+          completeHourlyData.push({
+            hour: hour,
+            transaction_count: 0,
+            total_revenue: 0
+          });
+        }
+      }
+
+      res.json(completeHourlyData);
+    } catch (error) {
+      console.error('Get hourly sales error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  // Alternative method if timezone conversion is needed
+getHourlySalesWithTimezone: async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    let query = `
+      SELECT 
+        HOUR(CONVERT_TZ(created_at, '+00:00', '+08:00')) AS hour,
+        COUNT(*) AS transaction_count,
+        SUM(total) AS total_revenue
+      FROM sales
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (start_date && end_date) {
+      query += ` AND DATE(CONVERT_TZ(created_at, '+00:00', '+08:00')) BETWEEN ? AND ?`;
+      params.push(start_date, end_date);
+    }
+
+    query += ` GROUP BY HOUR(CONVERT_TZ(created_at, '+00:00', '+08:00')) ORDER BY hour`;
+
+    const [hourlyData] = await db.execute(query, params);
+    res.json(hourlyData);
+  } catch (error) {
+    console.error('Get hourly sales with timezone error:', error);
+    return saleController.getHourlySales(req, res);
+  }
+},
+
+
   getPaymentMethodAnalytics: async (req, res) => {
     try {
       const { start_date, end_date } = req.query;
@@ -195,37 +278,6 @@ const saleController = {
     }
   },
 
-  // NEW: Get hourly sales data
-  getHourlySales: async (req, res) => {
-    try {
-      const { start_date, end_date } = req.query;
-
-      let query = `
-        SELECT 
-          HOUR(created_at) as hour,
-          COUNT(*) as transaction_count,
-          SUM(total) as total_revenue
-        FROM sales 
-        WHERE 1=1
-      `;
-      const params = [];
-
-      if (start_date && end_date) {
-        query += ' AND DATE(created_at) BETWEEN ? AND ?';
-        params.push(start_date, end_date);
-      }
-
-      query += ' GROUP BY HOUR(created_at) ORDER BY hour';
-
-      const [hourlyData] = await db.execute(query, params);
-      res.json(hourlyData);
-    } catch (error) {
-      console.error('Get hourly sales error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
-
-  // NEW: Get category-wise sales
   getCategorySales: async (req, res) => {
     try {
       const { start_date, end_date } = req.query;
