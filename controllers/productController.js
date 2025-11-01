@@ -54,6 +54,7 @@ const productController = {
         [name, parseFloat(price), parseInt(stock) || 0, category, image]
       );
 
+      // Create inventory log for initial stock
       if (parseInt(stock) > 0) {
         await db.execute(
           'INSERT INTO inventory_logs (product_id, change_amount, note) VALUES (?, ?, ?)',
@@ -84,16 +85,46 @@ const productController = {
       const { id } = req.params;
       const { name, price, stock, category, image } = req.body;
 
+      // Get current product data first to compare stock changes
+      const [currentProducts] = await db.execute(
+        'SELECT stock FROM products WHERE id = ? AND is_active = 1',
+        [id]
+      );
+
+      if (currentProducts.length === 0) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      const oldStock = currentProducts[0].stock;
+      const newStock = parseInt(stock);
+      const stockChange = newStock - oldStock;
+
+      // Update the product
       const [result] = await db.execute(
         'UPDATE products SET name = ?, price = ?, stock = ?, category = ?, image = ? WHERE id = ? AND is_active = 1',
-        [name, parseFloat(price), parseInt(stock), category, image, id]
+        [name, parseFloat(price), newStock, category, image, id]
       );
 
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Product not found' });
       }
 
-      res.json({ message: 'Product updated successfully' });
+      // Create inventory log if stock changed
+      if (stockChange !== 0) {
+        const note = stockChange > 0 
+          ? `Manual stock adjustment: +${stockChange} units` 
+          : `Manual stock adjustment: ${stockChange} units`;
+
+        await db.execute(
+          'INSERT INTO inventory_logs (product_id, change_amount, note) VALUES (?, ?, ?)',
+          [id, stockChange, note]
+        );
+      }
+
+      res.json({ 
+        message: 'Product updated successfully',
+        stockChange: stockChange !== 0 ? stockChange : undefined
+      });
     } catch (error) {
       console.error('Update product error:', error);
       res.status(500).json({ error: 'Internal server error' });
