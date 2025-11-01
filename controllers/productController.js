@@ -10,6 +10,7 @@ const productController = {
         FROM products p
         LEFT JOIN sale_items si ON p.id = si.product_id
         LEFT JOIN sales s ON si.sale_id = s.id
+        WHERE p.is_active = 1
         GROUP BY p.id
         ORDER BY p.name
       `);
@@ -25,7 +26,7 @@ const productController = {
     try {
       const { id } = req.params;
       const [products] = await db.execute(
-        'SELECT * FROM products WHERE id = ?',
+        'SELECT * FROM products WHERE id = ? AND is_active = 1',
         [id]
       );
 
@@ -49,7 +50,7 @@ const productController = {
       }
 
       const [result] = await db.execute(
-        'INSERT INTO products (name, price, stock, category, image) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO products (name, price, stock, category, image, is_active) VALUES (?, ?, ?, ?, ?, 1)',
         [name, parseFloat(price), parseInt(stock) || 0, category, image]
       );
 
@@ -68,7 +69,8 @@ const productController = {
           price: parseFloat(price),
           stock: parseInt(stock) || 0,
           category,
-          image
+          image,
+          is_active: 1
         }
       });
     } catch (error) {
@@ -83,7 +85,7 @@ const productController = {
       const { name, price, stock, category, image } = req.body;
 
       const [result] = await db.execute(
-        'UPDATE products SET name = ?, price = ?, stock = ?, category = ?, image = ? WHERE id = ?',
+        'UPDATE products SET name = ?, price = ?, stock = ?, category = ?, image = ? WHERE id = ? AND is_active = 1',
         [name, parseFloat(price), parseInt(stock), category, image, id]
       );
 
@@ -102,15 +104,33 @@ const productController = {
     try {
       const { id } = req.params;
 
-      const [result] = await db.execute('DELETE FROM products WHERE id = ?', [id]);
+      // Check if product exists and is active
+      const [products] = await db.execute(
+        'SELECT * FROM products WHERE id = ? AND is_active = 1',
+        [id]
+      );
 
-      if (result.affectedRows === 0) {
+      if (products.length === 0) {
         return res.status(404).json({ error: 'Product not found' });
       }
+
+      // Soft delete - mark as inactive instead of deleting
+      const [result] = await db.execute(
+        'UPDATE products SET is_active = 0 WHERE id = ?',
+        [id]
+      );
 
       res.json({ message: 'Product deleted successfully' });
     } catch (error) {
       console.error('Delete product error:', error);
+      
+      // Handle any foreign key constraint errors (just in case)
+      if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+        return res.status(400).json({ 
+          error: 'Cannot delete this product because it has been used in sales transactions.' 
+        });
+      }
+      
       res.status(500).json({ error: 'Internal server error' });
     }
   },
@@ -121,7 +141,7 @@ const productController = {
       const { change_amount, note } = req.body;
 
       const [products] = await db.execute(
-        'SELECT stock FROM products WHERE id = ?',
+        'SELECT stock FROM products WHERE id = ? AND is_active = 1',
         [id]
       );
 
